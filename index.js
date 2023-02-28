@@ -34,7 +34,7 @@ app.route("/new")
 
                 console.log(colors.green("Send:") + "/new")
 
-                res.send(data)
+                res.send(JSON.stringify(data))
                 next()
             }
         )
@@ -96,20 +96,19 @@ app.route("/views")
             "./database.json",
             "utf-8",
             (err, data) => {
-                if (err) throw err
+                if (err) throw err;
 
-                const hasViews = JSON.parse(data).filter(obj => obj.views)
-                const noHasViews = JSON.parse(data).filter(obj => !obj.views)
+                const hasViews = JSON.parse(data).filter(obj => obj.views);
+                const noHasViews = JSON.parse(data).filter(obj => !obj.views);
 
-                const sortData = hasViews.sort((obj1, obj2) => {
-                    return obj2.views - obj1.views
+                hasViews.sort((obj1, obj2) => {
+                    return obj2.views - obj1.views;
                 })
 
-                sortData.push(...noHasViews)
+                const newData = hasViews.concat(noHasViews);
+                res.send(JSON.stringify(newData))
 
                 console.log(colors.green("Send:") + "/views")
-
-                res.send(JSON.stringify(sortData))
                 next()
             }
         )
@@ -154,17 +153,35 @@ app.route("/post/:id")
             "./database.json",
             "utf-8",
             (err, data) => {
-                if (err) res.sendStatus(411);
+                if (err) res.sendStatus(411)
 
-                JSON.parse(data).filter(post => {
-                    if (post.id == req.params.id) {
-                        res.send(post)
-                        // console.log(colors.green("Get: ") + `/post/${req.params.id}`)
-                    }
-                })
+                // const newData = JSON.parse(data).filter(post => post.id != req.params.id)
 
-                next();
-            })
+                // JSON.parse(data).filter(post => {
+                //     if (post.id == req.params.id) {
+                //         post.views
+                //             ? post.views += 1
+                //             : post.views = 1
+
+                //         newData.push(post)
+
+                //         fs.writeFile(
+                //             "./database.json",
+                //             JSON.stringify(newData),
+                //             err => { if (err) throw err }
+                //         );
+
+                //         res.send(JSON.stringify(post));
+                //     }
+                // })
+
+                const post = JSON.parse(data).filter(post => post.id == req.params.id)
+                res.send(JSON.stringify(post[0]))
+
+                console.log(colors.green("Get: ") + `/post/${req.params.id}`)
+                next()
+            }
+        )
     })
 
     .post(upload.any(), (req, res, next) => {
@@ -174,46 +191,31 @@ app.route("/post/:id")
             (err, data) => {
                 if (err) res.sendStatus(412);
 
-                const newData = [];
+                const targetPost = JSON.parse(data).filter(post => post.id == req.params.id)
+                const otherPosts = JSON.parse(data).filter(post => post.id != req.params.id)
 
-                JSON.parse(data).filter(post => {
-                    if (post.id != req.params.id) {
-                        newData.push(post)
-                    }
-                });
+                if (targetPost[0].comments) {
+                    targetPost[0].comments.push(JSON.parse(JSON.stringify(req.body)));
+                } else {
+                    targetPost[0].comments = Array(JSON.parse(JSON.stringify(req.body)));
+                }
 
-                JSON.parse(data).filter(post => {
-                    if (post.id == req.params.id) {
-                        if (post.comments) {
-                            post.comments.push(req.body);
-                            newData.unshift(post);
-                        } else {
-                            post.comments = Array(req.body);
-                            newData.unshift(post);
-                        }
-                    }
-                });
+                otherPosts.push(targetPost[0])
 
                 fs.writeFile(
                     "./database.json",
-                    JSON.stringify(newData),
-                    (err) => {
-                        if (err) throw err;
-                        console.log(colors.green("New comment in ") + `/post/${req.params.id}`);
-                    }
+                    JSON.stringify(otherPosts),
+                    err => { if (err) throw err }
                 );
 
                 res.sendStatus(212);
+                console.log(colors.green("New comment in ") + `/post/${req.params.id}`);
                 next();
             })
     })
 
 app.route("/post/:id/like")
     .post(upload.any(), (req, res, next) => {
-        let id = req.params.id;
-
-        console.log(colors.bgRed(id))
-
         fs.readFile(
             "./database.json",
             "utf-8",
@@ -223,14 +225,14 @@ app.route("/post/:id/like")
                 const newData = []
 
                 JSON.parse(data).filter(post => {
-                    if (post.id != id) {
+                    if (post.id != req.params.id) {
                         newData.push(post)
                     }
                 })
 
                 JSON.parse(data).filter(post => {
-                    if (post.id == id) {
-                        if (post.views) {
+                    if (post.id == req.params.id) {
+                        if (post.likes) {
                             post.likes += 1
                         } else {
                             post.likes = 1
@@ -240,63 +242,66 @@ app.route("/post/:id/like")
                     }
                 });
 
+
                 fs.writeFile(
                     "./database.json",
                     JSON.stringify(newData),
                     (err) => {
-                        if (err) throw err;
-                        console.log(colors.green("Like: ") + `/post/${id}`);
+                        if (err) {
+                            res.sendStatus(413);
+                            next();
+                        };
                     }
                 );
 
+                console.log(colors.green("Like: ") + `/post/${req.params.id}`);
                 res.sendStatus(213);
                 next();
             })
     })
 
-// app.route("/post/:id/view")
-//     .post(upload.any(), (req, res, next) => {
-//         fs.readFile(
-//             "./database.json",
-//             "utf-8",
-//             (err, data) => {
-//                 if (err) res.sendStatus(414)
+app.route("/post/:id/view")
+    .post(upload.any(), (req, res, next) => {
+        fs.readFile(
+            "./database.json",
+            "utf-8",
+            (err, data) => {
+                if (err) res.sendStatus(413)
 
-//                 let id = req.params.id;
+                const newData = []
 
-//                 const newData = []
+                JSON.parse(data).filter(post => {
+                    if (post.id != req.params.id) {
+                        newData.push(post)
+                    }
+                })
 
-//                 JSON.parse(data).filter(post => {
-//                     if (post.id != req.params.id) {
-//                         newData.push(post)
-//                     }
-//                 })
+                JSON.parse(data).filter(post => {
+                    if (post.id == req.params.id) {
+                        if (post.views) {
+                            post.views += 1
+                        } else {
+                            post.views = 1
+                        }
 
-//                 JSON.parse(data).filter(post => {
-//                     if (post.id == id) {
-//                         if (post.views) {
-//                             post.views += 1
-//                         } else {
-//                             post.views = 1
-//                         }
+                        newData.push(post);
+                    }
+                });
 
-//                         newData.unshift(post);
-//                     }
-//                 });
 
-//                 fs.writeFile(
-//                     "./database.json",
-//                     JSON.stringify(newData),
-//                     (err) => {
-//                         if (err) throw err;
-//                         console.log(colors.green("View ") + `/post/${id}`);
-//                     }
-//                 );
+                fs.writeFile(
+                    "./database.json",
+                    JSON.stringify(newData),
+                    (err) => {
+                        if (err) throw err;
+                    }
+                );
 
-//                 res.sendStatus(214);
-//                 next();
-//             })
-//     });
+                console.log(colors.green("View: ") + `/post/${req.params.id}`);
+                res.sendStatus(213);
+                next();
+            })
+    })
 
 app.route("/contact")
     .post(upload.any(), (req, res, next) => {
@@ -323,7 +328,6 @@ app.route("/contact")
                 res.sendStatus(230)
                 next()
             });
-
     })
 
 
